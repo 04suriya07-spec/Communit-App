@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Req, UnauthorizedException } from '@nestjs/common';
 import { PersonaService } from '../services/persona.service';
 import { Request } from 'express';
 import { randomUUID } from 'crypto';
@@ -26,7 +26,7 @@ export class PersonaController {
     }> {
         const session = (req as any).session;
         if (!session?.accountabilityProfileId) {
-            throw new Error('Unauthorized');
+            throw new UnauthorizedException();
         }
 
         const personas = await this.personaService.getActivePersonas(
@@ -58,7 +58,7 @@ export class PersonaController {
     }> {
         const session = (req as any).session;
         if (!session?.accountabilityProfileId) {
-            throw new Error('Unauthorized');
+            throw new UnauthorizedException();
         }
 
         const persona = await this.personaService.createPersona({
@@ -92,7 +92,7 @@ export class PersonaController {
     }> {
         const session = (req as any).session;
         if (!session?.accountabilityProfileId) {
-            throw new Error('Unauthorized');
+            throw new UnauthorizedException();
         }
 
         const newPersona = await this.personaService.rotatePersona({

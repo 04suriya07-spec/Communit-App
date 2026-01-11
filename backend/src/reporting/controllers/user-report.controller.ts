@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Query, Req } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Req, UnauthorizedException } from '@nestjs/common';
 import { ReportingService } from '../services/reporting.service';
 import { Request } from 'express';
 import { randomUUID } from 'crypto';
@@ -28,7 +28,7 @@ export class UserReportController {
     }> {
         const session = (req as any).session;
         if (!session?.accountabilityProfileId) {
-            throw new Error('Unauthorized');
+            throw new UnauthorizedException();
         }
 
         const result = await this.reportingService.submitReport({
@@ -63,7 +63,7 @@ export class UserReportController {
     }> {
         const session = (req as any).session;
         if (!session?.accountabilityProfileId) {
-            throw new Error('Unauthorized');
+            throw new UnauthorizedException();
         }
 
         const result = await this.reportingService.getUserReports({

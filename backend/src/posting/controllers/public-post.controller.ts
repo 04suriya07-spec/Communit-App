@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Body, Query, Param, Req } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Query, Param, Req, UnauthorizedException } from '@nestjs/common';
 import { PostService } from '../services/post.service';
 import { Request } from 'express';
 import { randomUUID } from 'crypto';
@@ -27,7 +27,7 @@ export class PublicPostController {
     }> {
         const session = (req as any).session;
         if (!session?.accountabilityProfileId) {
-            throw new Error('Unauthorized');
+            throw new UnauthorizedException();
         }
 
         const result = await this.postService.createPost({
@@ -80,7 +80,7 @@ export class PublicPostController {
     }> {
         const session = (req as any).session;
         if (!session?.accountabilityProfileId) {
-            throw new Error('Unauthorized');
+            throw new UnauthorizedException();
         }
 
         const result = await this.postService.deletePost({

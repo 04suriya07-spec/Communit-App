@@ -34,6 +34,11 @@ export class IdentityService {
     }): Promise<{
         personaId: string;
         displayName: string;
+        _internal: {
+            accountabilityProfileId: string;
+            trustLevel: 'NEW' | 'REGULAR' | 'TRUSTED';
+            riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+        };
     }> {
         // 1. Hash email for lookup
         const emailHash = await this.hashEmail(data.email);
@@ -66,15 +71,20 @@ export class IdentityService {
         });
 
         // 7. Create trust level (default NEW)
-        await this.trustLevelRepo.create({
+        const trustLevel = await this.trustLevelRepo.create({
             personaId: persona.id,
             level: 'NEW',
         });
 
-        // 8. Return public data only (NO internal IDs)
+        // 8. Return public data + internal session data
         return {
             personaId: persona.id,
             displayName: persona.displayName,
+            _internal: {
+                accountabilityProfileId: accountabilityProfile.id,
+                trustLevel: trustLevel.level as 'NEW' | 'REGULAR' | 'TRUSTED',
+                riskLevel: accountabilityProfile.riskLevel as 'LOW' | 'MEDIUM' | 'HIGH',
+            },
         };
     }
 

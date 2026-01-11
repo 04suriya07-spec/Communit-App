@@ -2,9 +2,6 @@ import { Injectable } from '@nestjs/common';
 import session from 'express-session';
 import Redis from 'ioredis';
 
-// Use require for connect-redis v6 (stable API)
-const connectRedis = require('connect-redis');
-
 /**
  * Session Configuration Service
  * 
@@ -13,7 +10,6 @@ const connectRedis = require('connect-redis');
 @Injectable()
 export class SessionConfigService {
     private redisClient: Redis;
-    private RedisStore: any;
 
     constructor() {
         // Redis client for sessions
@@ -24,56 +20,60 @@ export class SessionConfigService {
                 return Math.min(times * 50, 2000);
             },
         });
-
-        // Initialize RedisStore (connect-redis v6 stable API)
-        this.RedisStore = connectRedis(session);
     }
 
     /**
      * Get user session middleware configuration
      */
     getUserSessionMiddleware() {
+        const { RedisStore } = require('connect-redis');
+        const isProd = process.env.NODE_ENV === 'production';
+
         return session({
-            store: new this.RedisStore({
+            store: new RedisStore({
                 client: this.redisClient,
                 prefix: 'sess:user:',
                 ttl: 86400, // 24 hours absolute expiry
             }),
-            name: 'sessionId', // Don't use default 'connect.sid'
+            name: 'sessionId',
             secret: process.env.SESSION_SECRET || 'CHANGE_THIS_IN_PRODUCTION',
             resave: false,
             saveUninitialized: false,
             rolling: true, // Refresh session on activity (idle timeout)
+            proxy: isProd, // Trust reverse proxy (Render) for HTTPS detection
             cookie: {
-                secure: process.env.NODE_ENV === 'production', // HTTPS only in prod
+                secure: isProd,
                 httpOnly: true, // Prevent XSS
                 maxAge: 1800000, // 30 minutes idle timeout
-                sameSite: 'strict', // CSRF protection
+                sameSite: isProd ? 'none' : 'lax', // 'none' required for cross-domain HTTPS
             },
         });
     }
 
     /**
      * Get admin session middleware configuration
-     * Separate store for admin isolation
      */
     getAdminSessionMiddleware() {
+        const { RedisStore } = require('connect-redis');
+        const isProd = process.env.NODE_ENV === 'production';
+
         return session({
-            store: new this.RedisStore({
+            store: new RedisStore({
                 client: this.redisClient,
                 prefix: 'sess:admin:',
-                ttl: 3600, // 1 hour absolute expiry (shorter for admins)
+                ttl: 3600, // 1 hour absolute expiry
             }),
             name: 'adminSessionId',
             secret: process.env.ADMIN_SESSION_SECRET || process.env.SESSION_SECRET || 'CHANGE_THIS',
             resave: false,
             saveUninitialized: false,
             rolling: true,
+            proxy: isProd,
             cookie: {
-                secure: process.env.NODE_ENV === 'production',
+                secure: isProd,
                 httpOnly: true,
-                maxAge: 900000, // 15 minutes idle timeout (stricter for admins)
-                sameSite: 'strict',
+                maxAge: 900000, // 15 minutes idle timeout
+                sameSite: isProd ? 'none' : 'lax',
                 path: '/api/v1/internal', // Admin routes only
             },
         });

@@ -13,7 +13,7 @@ async function bootstrap() {
     // Global prefix for API routes
     app.setGlobalPrefix('api/v1');
 
-    const port = process.env.PORT || 3001;
+    const port = process.env.PORT || 3000;
     await app.listen(port);
 
     console.log(`🚀 Community App running on port ${port}`);

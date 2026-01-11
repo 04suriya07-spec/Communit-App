@@ -19,17 +19,29 @@ export class AuthController {
             email: string;
             password: string;
             initialDisplayName: string;
-        }
+        },
+        @Req() req: Request
     ): Promise<{
         personaId: string;
         displayName: string;
         correlationId: string;
     }> {
+        console.log('Register request received:', dto.email);
         const result = await this.identityService.register({
             email: dto.email,
             password: dto.password,
             initialDisplayName: dto.initialDisplayName,
         });
+        console.log('Identity registration successful:', result.personaId);
+
+        // Store internal session data (NOT returned to client)
+        const session = (req as any).session;
+        session.personaId = result.personaId;
+        session.accountabilityProfileId = result._internal.accountabilityProfileId;
+        session.trustLevel = result._internal.trustLevel;
+        session.riskLevel = result._internal.riskLevel;
+
+        console.log('Session properties updated');
 
         return {
             personaId: result.personaId,

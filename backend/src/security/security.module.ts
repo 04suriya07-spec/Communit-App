@@ -41,6 +41,6 @@ export class SecurityModule implements NestModule {
                 this.sessionConfig.getAdminSessionMiddleware(),
                 SessionValidationMiddleware
             )
-            .forRoutes('/api/v1/internal/(.*)');
+            .forRoutes('/api/v1/internal/(.*)')
     }
 }
