@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import session from 'express-session';
-import { RedisStore } from 'connect-redis';
 import Redis from 'ioredis';
+
+// Use require to bypass TypeScript's incorrect type definitions for connect-redis v7
+const ConnectRedis = require('connect-redis');
 
 /**
  * Session Configuration Service
@@ -11,6 +13,7 @@ import Redis from 'ioredis';
 @Injectable()
 export class SessionConfigService {
     private redisClient: Redis;
+    private RedisStore: any;
 
     constructor() {
         // Redis client for sessions
@@ -21,6 +24,9 @@ export class SessionConfigService {
                 return Math.min(times * 50, 2000);
             },
         });
+
+        // Initialize RedisStore (connect-redis v7 uses factory pattern)
+        this.RedisStore = ConnectRedis(session);
     }
 
     /**
@@ -28,11 +34,11 @@ export class SessionConfigService {
      */
     getUserSessionMiddleware() {
         return session({
-            store: new RedisStore({
-                client: this.redisClient as any,
+            store: new this.RedisStore({
+                client: this.redisClient,
                 prefix: 'sess:user:',
                 ttl: 86400, // 24 hours absolute expiry
-            } as any),
+            }),
             name: 'sessionId', // Don't use default 'connect.sid'
             secret: process.env.SESSION_SECRET || 'CHANGE_THIS_IN_PRODUCTION',
             resave: false,
@@ -53,11 +59,11 @@ export class SessionConfigService {
      */
     getAdminSessionMiddleware() {
         return session({
-            store: new RedisStore({
-                client: this.redisClient as any,
+            store: new this.RedisStore({
+                client: this.redisClient,
                 prefix: 'sess:admin:',
                 ttl: 3600, // 1 hour absolute expiry (shorter for admins)
-            } as any),
+            }),
             name: 'adminSessionId',
             secret: process.env.ADMIN_SESSION_SECRET || process.env.SESSION_SECRET || 'CHANGE_THIS',
             resave: false,
