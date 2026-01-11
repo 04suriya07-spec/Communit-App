@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import session from 'express-session';
 import Redis from 'ioredis';
 
-// Use require to bypass TypeScript's incorrect type definitions for connect-redis v7
-const ConnectRedis = require('connect-redis');
+// Use require for connect-redis v6 (stable API)
+const connectRedis = require('connect-redis');
 
 /**
  * Session Configuration Service
@@ -25,8 +25,8 @@ export class SessionConfigService {
             },
         });
 
-        // Initialize RedisStore (connect-redis v7 uses factory pattern)
-        this.RedisStore = ConnectRedis(session);
+        // Initialize RedisStore (connect-redis v6 stable API)
+        this.RedisStore = connectRedis(session);
     }
 
     /**
