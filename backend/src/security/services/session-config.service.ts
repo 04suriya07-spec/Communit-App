@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import session from 'express-session';
 import RedisStore from 'connect-redis';
-import { Redis } from 'ioredis';
+import Redis from 'ioredis';
 
 /**
  * Session Configuration Service
@@ -11,6 +11,7 @@ import { Redis } from 'ioredis';
 @Injectable()
 export class SessionConfigService {
     private redisClient: Redis;
+    private redisStore: any;
 
     constructor() {
         // Redis client for sessions
@@ -28,7 +29,7 @@ export class SessionConfigService {
      */
     getUserSessionMiddleware() {
         return session({
-            store: new RedisStore({
+            store: new this.redisStore({
                 client: this.redisClient,
                 prefix: 'sess:user:',
                 ttl: 86400, // 24 hours absolute expiry
@@ -53,7 +54,7 @@ export class SessionConfigService {
      */
     getAdminSessionMiddleware() {
         return session({
-            store: new RedisStore({
+            store: new this.redisStore({
                 client: this.redisClient,
                 prefix: 'sess:admin:',
                 ttl: 3600, // 1 hour absolute expiry (shorter for admins)
