@@ -3,6 +3,9 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
+# Install OpenSSL 1.1 for Prisma
+RUN apk add --no-cache openssl1.1-compat
+
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
@@ -23,6 +26,9 @@ RUN npm run build
 FROM node:18-alpine
 
 WORKDIR /app
+
+# Install OpenSSL 1.1 for Prisma runtime
+RUN apk add --no-cache openssl1.1-compat
 
 # Copy package files
 COPY package*.json ./
