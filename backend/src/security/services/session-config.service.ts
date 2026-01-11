@@ -11,7 +11,6 @@ import Redis from 'ioredis';
 @Injectable()
 export class SessionConfigService {
     private redisClient: Redis;
-    private redisStore: any;
 
     constructor() {
         // Redis client for sessions
@@ -28,8 +27,11 @@ export class SessionConfigService {
      * Get user session middleware configuration
      */
     getUserSessionMiddleware() {
+        // Create RedisStore constructor from connect-redis
+        const Store = RedisStore(session);
+
         return session({
-            store: new this.redisStore({
+            store: new Store({
                 client: this.redisClient,
                 prefix: 'sess:user:',
                 ttl: 86400, // 24 hours absolute expiry
@@ -53,8 +55,11 @@ export class SessionConfigService {
      * Separate store for admin isolation
      */
     getAdminSessionMiddleware() {
+        // Create RedisStore constructor from connect-redis
+        const Store = RedisStore(session);
+
         return session({
-            store: new this.redisStore({
+            store: new Store({
                 client: this.redisClient,
                 prefix: 'sess:admin:',
                 ttl: 3600, // 1 hour absolute expiry (shorter for admins)
