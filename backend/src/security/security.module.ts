@@ -2,6 +2,7 @@ import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 
 // Services
 import { SessionConfigService } from './services/session-config.service';
+import { EncryptionService } from './services/encryption.service';
 
 // Middleware
 import { SessionValidationMiddleware } from './middleware/session-validation.middleware';
@@ -14,10 +15,12 @@ import { SessionValidationMiddleware } from './middleware/session-validation.mid
 @Module({
     providers: [
         SessionConfigService,
+        EncryptionService,
         SessionValidationMiddleware,
     ],
     exports: [
         SessionConfigService,
+        EncryptionService,
     ],
 })
 export class SecurityModule implements NestModule {
