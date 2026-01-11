@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import session from 'express-session';
-import RedisStore from 'connect-redis';
+import { RedisStore } from 'connect-redis';
 import Redis from 'ioredis';
 
 /**
@@ -23,8 +23,8 @@ export class SessionConfigService {
             },
         });
 
-        // Redis store for express-session
-        this.redisStore = RedisStore(session);
+        // Redis store for express-session (connect-redis v9.x)
+        this.redisStore = RedisStore;
     }
 
     /**
