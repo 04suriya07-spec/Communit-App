@@ -1,0 +1,29 @@
+{
+  "name": "community-app",
+  "version": "0.1.0",
+  "description": "Production-grade communication SaaS with tiered privacy states",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "shared"
+  ],
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "db:push": "cd backend && npx prisma db push",
+    "db:generate": "cd backend && npx prisma generate",
+    "db:studio": "cd backend && npx prisma studio"
+  },
+  "keywords": [
+    "communication",
+    "privacy",
+    "e2ee",
+    "moderation",
+    "saas"
+  ],
+  "author": "",
+  "license": "UNLICENSED"
+}

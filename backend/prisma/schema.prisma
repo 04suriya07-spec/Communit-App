@@ -1,0 +1,407 @@
+// ============================================================
+// DATABASE SCHEMA (PRISMA ORM)
+// Community App - Production-Grade Communication SaaS
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum TrustLevelEnum {
+  NEW
+  REGULAR
+  TRUSTED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum AppealStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum RateLimitScope {
+  GLOBAL
+  SPACE
+}
+
+// ============================================================
+// IDENTITY & TRUST SYSTEM
+// ============================================================
+
+model AuthProfile {
+  id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  emailEncrypted          String                  @unique @map("email_encrypted")
+  emailHash               String                  @unique @map("email_hash")
+  authProvider            String                  @default("firebase") @map("auth_provider")
+  createdAt               DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  accountabilityProfiles  AccountabilityProfile[]
+
+  @@map("auth_profiles")
+}
+
+model AccountabilityProfile {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authProfileId   String        @map("auth_profile_id") @db.Uuid
+  globalAbuseScore Float        @default(0.0) @map("global_abuse_score")
+  isVerified      Boolean       @default(false) @map("is_verified")
+  riskLevel       RiskLevel     @default(LOW) @map("risk_level")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  
+  authProfile     AuthProfile   @relation(fields: [authProfileId], references: [id], onDelete: Cascade)
+  personas        Persona[]
+
+  @@map("accountability_profiles")
+}
+
+model Persona {
+  id                        String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountabilityProfileId   String                @map("accountability_profile_id") @db.Uuid
+  displayName               String                @map("display_name")
+  avatarUrl                 String?               @map("avatar_url")
+  isActive                  Boolean               @default(true) @map("is_active")
+  deletedAt                 DateTime?             @map("deleted_at") @db.Timestamptz
+  createdAt                 DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  
+  accountabilityProfile     AccountabilityProfile @relation(fields: [accountabilityProfileId], references: [id], onDelete: Cascade)
+  trustLevels               TrustLevel[]
+  publicContent             PublicContent[]
+  communityContent          CommunityContent[]
+  e2eeMetadata              E2EEMetadata[]
+  spaceMembers              SpaceMember[]
+  reports                   Report[]
+  appeals                   Appeal[]
+  e2eeConsents              E2EEConsent[]
+  ownedSpaces               Space[]               @relation("SpaceOwner")
+
+  @@map("personas")
+}
+
+model TrustLevel {
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaId  String      @map("persona_id") @db.Uuid
+  level      TrustLevelEnum  @default(NEW)
+  grantedAt  DateTime    @default(now()) @map("granted_at") @db.Timestamptz
+  
+  persona    Persona     @relation(fields: [personaId], references: [id], onDelete: Cascade)
+
+  @@map("trust_levels")
+}
+
+// ============================================================
+// INTERNAL ADMIN IDENTITY
+// ============================================================
+
+model InternalAdmin {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String           @unique
+  role            String
+  isActive        Boolean          @default(true) @map("is_active")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  
+  moderationLogs  ModerationLog[]
+
+  @@map("internal_admins")
+}
+
+// ============================================================
+// SPACES & PERMISSIONS
+// ============================================================
+
+model Space {
+  id                String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type              String
+  /// IMMUTABLE once set to E2EE. Change only via enable/revoke flows.
+  encryptionLevel   String                  @map("encryption_level")
+  moderationPolicy  String                  @map("moderation_policy")
+  ownerPersonaId    String?                 @map("owner_persona_id") @db.Uuid
+  isE2eeEligible    Boolean                 @default(false) @map("is_e2ee_eligible")
+  e2eeEnabledAt     DateTime?               @map("e2ee_enabled_at") @db.Timestamptz
+  stateLock         Boolean                 @default(false) @map("state_lock")
+  deletedAt         DateTime?               @map("deleted_at") @db.Timestamptz
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  
+  ownerPersona      Persona?                @relation("SpaceOwner", fields: [ownerPersonaId], references: [id])
+  members           SpaceMember[]
+  privacyState      SpacePrivacyState?
+  e2eeConsents      E2EEConsent[]
+  communityContent  CommunityContent[]
+  e2eeMetadata      E2EEMetadata[]
+  healthScore       CommunityHealthScore?
+  rateLimits        RateLimit[]
+
+  @@map("spaces")
+}
+
+model SpaceMember {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  spaceId   String   @map("space_id") @db.Uuid
+  personaId String   @map("persona_id") @db.Uuid
+  role      String   @default("MEMBER")
+  joinedAt  DateTime @default(now()) @map("joined_at") @db.Timestamptz
+  
+  space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  persona   Persona  @relation(fields: [personaId], references: [id], onDelete: Cascade)
+
+  @@unique([spaceId, personaId])
+  @@index([spaceId])
+  @@index([personaId])
+  @@map("space_members")
+}
+
+model SpacePrivacyState {
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  spaceId         String  @unique @map("space_id") @db.Uuid
+  state           String
+  explanationText String? @map("explanation_text")
+  
+  space           Space   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@map("space_privacy_state")
+}
+
+// ============================================================
+// E2EE CONSENT RECORDS
+// ============================================================
+
+model E2EEConsent {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  spaceId     String   @map("space_id") @db.Uuid
+  personaId   String   @map("persona_id") @db.Uuid
+  consentedAt DateTime @default(now()) @map("consented_at") @db.Timestamptz
+  
+  space       Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  persona     Persona  @relation(fields: [personaId], references: [id])
+
+  @@unique([spaceId, personaId])
+  @@map("e2ee_consents")
+}
+
+// ============================================================
+// CONTENT STORAGE (PRIVACY-SEPARATED)
+// ============================================================
+
+model PublicContent {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaId         String            @map("persona_id") @db.Uuid
+  body              String
+  isModerated       Boolean           @default(false) @map("is_moderated")
+  moderationStatus  ModerationStatus  @default(PENDING) @map("moderation_status")
+  deletedAt         DateTime?         @map("deleted_at") @db.Timestamptz
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  
+  persona           Persona           @relation(fields: [personaId], references: [id])
+
+  @@index([personaId])
+  @@index([moderationStatus])
+  @@map("public_content")
+}
+
+model CommunityContent {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  spaceId           String            @map("space_id") @db.Uuid
+  personaId         String            @map("persona_id") @db.Uuid
+  body              String
+  isModerated       Boolean           @default(false) @map("is_moderated")
+  moderationStatus  ModerationStatus  @default(PENDING) @map("moderation_status")
+  deletedAt         DateTime?         @map("deleted_at") @db.Timestamptz
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  
+  space             Space             @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  persona           Persona           @relation(fields: [personaId], references: [id])
+
+  @@index([spaceId])
+  @@map("community_content")
+}
+
+/// CRITICAL: This table must NEVER contain plaintext, keys, or decrypted content
+model E2EEMetadata {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  spaceId          String   @map("space_id") @db.Uuid
+  senderPersonaId  String   @map("sender_persona_id") @db.Uuid
+  ciphertextSize   Int      @map("ciphertext_size")
+  clientSequence   Int      @map("client_sequence")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  
+  space            Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  sender           Persona  @relation(fields: [senderPersonaId], references: [id])
+
+  @@index([spaceId])
+  @@map("e2ee_metadata")
+}
+
+// ============================================================
+// TRUST & SAFETY
+// ============================================================
+
+model Report {
+  id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reporterPersonaId  String        @map("reporter_persona_id") @db.Uuid
+  targetId           String        @map("target_id") @db.Uuid
+  targetType         String        @map("target_type")
+  reason             String
+  status             ReportStatus  @default(OPEN)
+  legalHold          Boolean       @default(false) @map("legal_hold")
+  retentionUntil     DateTime?     @map("retention_until") @db.Timestamptz
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  
+  reporter           Persona       @relation(fields: [reporterPersonaId], references: [id])
+
+  @@index([status])
+  @@map("reports")
+}
+
+model ModerationLog {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  targetId        String         @map("target_id") @db.Uuid
+  targetType      String         @map("target_type")
+  moderatorId     String         @map("moderator_id") @db.Uuid
+  action          String
+  reason          String
+  explanationLog  String?        @map("explanation_log")
+  isDryRun        Boolean        @default(false) @map("is_dry_run")
+  originEventId   String?        @map("origin_event_id") @db.Uuid
+  legalHold       Boolean        @default(false) @map("legal_hold")
+  retentionUntil  DateTime?      @map("retention_until") @db.Timestamptz
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  
+  moderator       InternalAdmin  @relation(fields: [moderatorId], references: [id])
+  appeals         Appeal[]
+
+  @@index([targetId, targetType])
+  @@map("moderation_logs")
+}
+
+model Appeal {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moderationLogId   String         @map("moderation_log_id") @db.Uuid
+  appellantPersonaId String        @map("appellant_persona_id") @db.Uuid
+  appealReason      String         @map("appeal_reason")
+  status            AppealStatus   @default(PENDING)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  
+  moderationLog     ModerationLog  @relation(fields: [moderationLogId], references: [id])
+  appellant         Persona        @relation(fields: [appellantPersonaId], references: [id])
+
+  @@index([status])
+  @@map("appeals")
+}
+
+model CommunityHealthScore {
+  id                      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  spaceId                 String   @unique @map("space_id") @db.Uuid
+  toxicityRate            Float    @map("toxicity_rate")
+  reportFrequency         Float    @map("report_frequency")
+  moderatorInterventions  Int      @map("moderator_interventions")
+  score                   Int
+  updatedAt               DateTime @default(now()) @map("updated_at") @db.Timestamptz
+  
+  space                   Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@map("community_health_score")
+}
+
+// ============================================================
+// ABUSE PREVENTION
+// ============================================================
+
+/// WARNING: Prisma cannot enforce scope constraint. Must be enforced at application layer.
+/// SQL constraint: (scope = 'GLOBAL' AND space_id IS NULL) OR (scope = 'SPACE' AND space_id IS NOT NULL)
+model RateLimit {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaId    String          @map("persona_id") @db.Uuid
+  actionType   String          @map("action_type")
+  scope        RateLimitScope  @default(GLOBAL)
+  spaceId      String?         @map("space_id") @db.Uuid
+  window       String
+  count        Int
+  blockedUntil DateTime?       @map("blocked_until") @db.Timestamptz
+  
+  space        Space?          @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@index([personaId])
+  @@index([scope, spaceId])
+  @@map("rate_limits")
+}
+
+// ============================================================
+// POLICY ENGINE
+// ============================================================
+
+model Policy {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scope      String
+  ruleType   String   @map("rule_type")
+  configJson Json     @map("config_json")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("policies")
+}
+
+// ============================================================
+// EVENT BUS
+// ============================================================
+
+model Event {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventType      String    @map("event_type")
+  payload        Json
+  processed      Boolean   @default(false)
+  idempotencyKey String?   @unique @map("idempotency_key")
+  retentionUntil DateTime? @map("retention_until") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([processed])
+  @@map("events")
+}
+
+// ============================================================
+// SYSTEM CONFIGURATION
+// ============================================================
+
+model SystemConfig {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz
+
+  @@map("system_config")
+}
+
+// ============================================================
+// SCHEMA VERSION TRACKING
+// ============================================================
+
+model SchemaVersion {
+  version     Int       @id
+  appliedAt   DateTime  @default(now()) @map("applied_at") @db.Timestamptz
+  description String?
+
+  @@map("schema_version")
+}
