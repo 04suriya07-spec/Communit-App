@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import session from 'express-session';
-import { RedisStore } from 'connect-redis';
-import Redis from 'ioredis';
+import RedisStore from 'connect-redis';
+import { Redis } from 'ioredis';
 
 /**
  * Session Configuration Service
