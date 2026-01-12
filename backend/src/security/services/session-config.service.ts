@@ -23,6 +23,27 @@ export class SessionConfigService {
         });
     }
 
+    /**
+     * Get user session middleware configuration
+     * NOTE: Using MemoryStore for MVP - Redis to be added later
+     */
+    getUserSessionMiddleware() {
+        const isProd = process.env.NODE_ENV === 'production';
+
+        return session({
+            secret: process.env.SESSION_SECRET || 'CHANGE_THIS_IN_PRODUCTION',
+            resave: true, // Required for MemoryStore to avoid touch() error
+            saveUninitialized: false,
+            rolling: true, // Refresh session on activity (idle timeout)
+            proxy: isProd, // Trust reverse proxy (Render) for HTTPS detection
+            cookie: {
+                secure: isProd,
+                httpOnly: true, // Prevent XSS
+                maxAge: 1800000, // 30 minutes idle timeout
+                sameSite: isProd ? 'none' : 'lax', // 'none' required for cross-domain HTTPS
+            },
+        });
+    }
 
 
     /**
