@@ -5,8 +5,8 @@
     "scripts": {
         "dev": "nest start --watch",
         "build": "nest build",
-        "start": "node dist/main",
-        "start:prod": "node dist/main.js",
+        "start": "npx prisma db push --accept-data-loss && node dist/main",
+        "start:prod": "npx prisma db push --accept-data-loss && node dist/main.js",
         "test": "jest"
     },
     "dependencies": {
