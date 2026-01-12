@@ -5,41 +5,70 @@ import { createRoot } from "react-dom/client";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { PersonaProvider } from "@/contexts/PersonaContext";
-import Auth from "./pages/Auth";
-import Feed from "./pages/Feed";
-import Communities from "./pages/Communities";
-import Discover from "./pages/Discover";
-import Messages from "./pages/Messages";
-import Likes from "./pages/Likes";
-import ModerationDashboard from "./pages/ModerationDashboard";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import AppShell from "@/components/layout/AppShell";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import PostsPage from "./pages/PostsPage";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+/**
+ * Community App - Phase 1 MVP
+ * 
+ * Routes:
+ * - /login - Public
+ * - /register - Public
+ * - /app/posts - Protected (main app)
+ * - / - Redirects to /app/posts
+ */
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <BrowserRouter>
-      <PersonaProvider>
+      <AuthProvider>
         <TooltipProvider>
           <Toaster />
           <Sonner />
           <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={<Feed />} />
-            <Route path="/communities" element={<Communities />} />
-            <Route path="/discover" element={<Discover />} />
-            <Route path="/messages" element={<Messages />} />
-            <Route path="/likes" element={<Likes />} />
-            <Route path="/admin/moderation" element={<ModerationDashboard />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            {/* Public routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+
+            {/* Protected routes */}
+            <Route
+              path="/app"
+              element={
+                <ProtectedRoute>
+                  <AppShell />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="/app/posts" replace />} />
+              <Route path="posts" element={<PostsPage />} />
+            </Route>
+
+            {/* Redirects */}
+            <Route path="/" element={<Navigate to="/app/posts" replace />} />
+
+            {/* 404 */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </TooltipProvider>
-      </PersonaProvider>
+      </AuthProvider>
     </BrowserRouter>
   </QueryClientProvider>
 );
 
 createRoot(document.getElementById("root")!).render(<App />);
+
