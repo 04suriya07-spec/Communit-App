@@ -19,7 +19,7 @@
         "@types/express-session": "^1.18.2",
         "@types/passport": "^1.0.17",
         "@types/passport-local": "^1.0.38",
-        "connect-redis": "^9.0.0",
+        "connect-redis": "^7.1.0",
         "cookie-parser": "^1.4.7",
         "csurf": "^1.11.0",
         "express-rate-limit": "^8.2.1",

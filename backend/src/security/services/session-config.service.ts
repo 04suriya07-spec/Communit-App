@@ -50,6 +50,7 @@ export class SessionConfigService {
         });
     }
 
+
     /**
      * Get admin session middleware configuration
      */
@@ -78,6 +79,7 @@ export class SessionConfigService {
             },
         });
     }
+
 
     /**
      * Session fingerprint for security
