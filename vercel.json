@@ -1,0 +1,11 @@
+{
+    "buildCommand": "cd ui_audit && npm run build:client",
+    "outputDirectory": "ui_audit/dist/spa",
+    "framework": "vite",
+    "rewrites": [
+        {
+            "source": "/(.*)",
+            "destination": "/index.html"
+        }
+    ]
+}

@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "dev:backend": "cd backend && npm run dev",
-    "dev:frontend": "cd frontend && npm run dev",
+    "dev:frontend": "cd ui_audit && npm run dev",
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
     "db:push": "cd backend && npx prisma db push",
