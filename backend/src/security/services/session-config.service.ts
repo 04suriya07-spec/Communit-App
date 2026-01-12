@@ -25,19 +25,12 @@ export class SessionConfigService {
 
     /**
      * Get user session middleware configuration
+     * NOTE: Using MemoryStore for MVP - Redis to be added later
      */
     getUserSessionMiddleware() {
-        const session = require('express-session');
-        const RedisStore = require('connect-redis')(session);
         const isProd = process.env.NODE_ENV === 'production';
 
         return session({
-            store: new RedisStore({
-                client: this.redisClient,
-                prefix: 'sess:user:',
-                ttl: 86400, // 24 hours absolute expiry
-            }),
-            name: 'connect.sid',
             secret: process.env.SESSION_SECRET || 'CHANGE_THIS_IN_PRODUCTION',
             resave: false,
             saveUninitialized: false,
@@ -52,20 +45,15 @@ export class SessionConfigService {
         });
     }
 
+
     /**
      * Get admin session middleware configuration
+     * NOTE: Using MemoryStore for MVP - Redis to be added later
      */
     getAdminSessionMiddleware() {
-        const session = require('express-session');
-        const RedisStore = require('connect-redis')(session);
         const isProd = process.env.NODE_ENV === 'production';
 
         return session({
-            store: new RedisStore({
-                client: this.redisClient,
-                prefix: 'sess:admin:',
-                ttl: 3600, // 1 hour absolute expiry
-            }),
             name: 'adminSessionId',
             secret: process.env.ADMIN_SESSION_SECRET || process.env.SESSION_SECRET || 'CHANGE_THIS',
             resave: false,
