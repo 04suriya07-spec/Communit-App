@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import session from 'express-session';
 import Redis from 'ioredis';
+import connectRedis from 'connect-redis';
 
 /**
  * Session Configuration Service
@@ -26,7 +27,7 @@ export class SessionConfigService {
      * Get user session middleware configuration
      */
     getUserSessionMiddleware() {
-        const RedisStore = require('connect-redis')(session);
+        const RedisStore = connectRedis(session);
         const isProd = process.env.NODE_ENV === 'production';
 
         return session({
@@ -50,12 +51,11 @@ export class SessionConfigService {
         });
     }
 
-
     /**
      * Get admin session middleware configuration
      */
     getAdminSessionMiddleware() {
-        const RedisStore = require('connect-redis')(session);
+        const RedisStore = connectRedis(session);
         const isProd = process.env.NODE_ENV === 'production';
 
         return session({
@@ -79,7 +79,6 @@ export class SessionConfigService {
             },
         });
     }
-
 
     /**
      * Session fingerprint for security
