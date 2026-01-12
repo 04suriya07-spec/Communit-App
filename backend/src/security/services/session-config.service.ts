@@ -27,7 +27,8 @@ export class SessionConfigService {
      * Get user session middleware configuration
      */
     getUserSessionMiddleware() {
-        const RedisStore = ConnectRedis(session);
+        const session = require('express-session');
+        const RedisStore = require('connect-redis')(session);
         const isProd = process.env.NODE_ENV === 'production';
 
         return session({
@@ -51,12 +52,12 @@ export class SessionConfigService {
         });
     }
 
-
     /**
      * Get admin session middleware configuration
      */
     getAdminSessionMiddleware() {
-        const RedisStore = ConnectRedis(session);
+        const session = require('express-session');
+        const RedisStore = require('connect-redis')(session);
         const isProd = process.env.NODE_ENV === 'production';
 
         return session({
