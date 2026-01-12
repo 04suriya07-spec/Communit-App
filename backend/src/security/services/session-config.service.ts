@@ -26,7 +26,7 @@ export class SessionConfigService {
      * Get user session middleware configuration
      */
     getUserSessionMiddleware() {
-        const { RedisStore } = require('connect-redis');
+        const RedisStore = require('connect-redis').default;
         const isProd = process.env.NODE_ENV === 'production';
 
         return session({
@@ -35,7 +35,7 @@ export class SessionConfigService {
                 prefix: 'sess:user:',
                 ttl: 86400, // 24 hours absolute expiry
             }),
-            name: 'sessionId',
+            name: 'connect.sid',
             secret: process.env.SESSION_SECRET || 'CHANGE_THIS_IN_PRODUCTION',
             resave: false,
             saveUninitialized: false,
@@ -50,11 +50,12 @@ export class SessionConfigService {
         });
     }
 
+
     /**
      * Get admin session middleware configuration
      */
     getAdminSessionMiddleware() {
-        const { RedisStore } = require('connect-redis');
+        const RedisStore = require('connect-redis').default;
         const isProd = process.env.NODE_ENV === 'production';
 
         return session({
