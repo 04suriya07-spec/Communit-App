@@ -5,6 +5,7 @@ import { PersonaRepository } from '../repositories/persona.repository';
 import { TrustLevelRepository } from '../repositories/trust-level.repository';
 import { EncryptionService } from '../../security/services/encryption.service';
 import * as crypto from 'crypto';
+import * as bcrypt from 'bcrypt';
 
 /**
  * Identity Service
@@ -25,61 +26,72 @@ export class IdentityService {
     /**
      * Register new user
      * Creates: auth_profile → accountability_profile → persona → trust_level
-     * CRITICAL: Always hash email before storing
+     * CRITICAL: Always hash email before storing, hash password with bcrypt
      */
     async register(data: {
         email: string;
-        password: string; // Handled by Firebase, not stored
+        password: string;
         initialDisplayName: string;
     }): Promise<{
         personaId: string;
         displayName: string;
+        passwordHash: string; // Return to store in auth system
         _internal: {
             accountabilityProfileId: string;
             trustLevel: 'NEW' | 'REGULAR' | 'TRUSTED';
             riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
         };
     }> {
-        // 1. Hash email for lookup
+        // 1. Validate password strength
+        if (!data.password || data.password.length < 6) {
+            throw new BadRequestException('Password must be at least 6 characters');
+        }
+
+        // 2. Hash email for lookup
         const emailHash = await this.hashEmail(data.email);
 
-        // 2. Encrypt email for recovery
+        // 3. Encrypt email for recovery
         const emailEncrypted = await this.encryptEmail(data.email);
 
-        // 3. Check if already registered
+        // 4. Check if already registered
         const existing = await this.authProfileRepo.findByEmailHash(emailHash);
         if (existing) {
             throw new ConflictException('EMAIL_ALREADY_EXISTS');
         }
 
-        // 4. Create auth profile
+        // 5. Hash password with bcrypt (salt rounds: 12)
+        const passwordHash = await bcrypt.hash(data.password, 12);
+
+        // 6. Create auth profile with password hash
         const authProfile = await this.authProfileRepo.create({
             emailEncrypted,
             emailHash,
-            authProvider: 'firebase',
+            authProvider: 'email', // Changed from 'firebase' to 'email'
+            passwordHash, // Store hashed password
         });
 
-        // 5. Create accountability profile
+        // 7. Create accountability profile
         const accountabilityProfile = await this.accountabilityRepo.create({
             authProfileId: authProfile.id,
         });
 
-        // 6. Create initial persona
+        // 8. Create initial persona
         const persona = await this.personaRepo.create({
             accountabilityProfileId: accountabilityProfile.id,
             displayName: data.initialDisplayName,
         });
 
-        // 7. Create trust level (default NEW)
+        // 9. Create trust level (default NEW)
         const trustLevel = await this.trustLevelRepo.create({
             personaId: persona.id,
             level: 'NEW',
         });
 
-        // 8. Return public data + internal session data
+        // 10. Return public data + internal session data
         return {
             personaId: persona.id,
             displayName: persona.displayName,
+            passwordHash, // Return for verification (not sent to client)
             _internal: {
                 accountabilityProfileId: accountabilityProfile.id,
                 trustLevel: trustLevel.level as 'NEW' | 'REGULAR' | 'TRUSTED',
@@ -90,11 +102,11 @@ export class IdentityService {
 
     /**
      * Login user
-     * CRITICAL: Always query by email_hash, never email_encrypted
+     * CRITICAL: Always query by email_hash, verify password with bcrypt
      */
     async login(data: {
         email: string;
-        password: string; // Verified by Firebase
+        password: string;
     }): Promise<{
         personaId: string;
         displayName: string;
@@ -114,7 +126,17 @@ export class IdentityService {
             throw new UnauthorizedException('INVALID_CREDENTIALS');
         }
 
-        // 3. Get accountability profile
+        // 3. Verify password
+        if (!authProfile.passwordHash) {
+            throw new UnauthorizedException('INVALID_AUTH_METHOD');
+        }
+
+        const isPasswordValid = await bcrypt.compare(data.password, authProfile.passwordHash);
+        if (!isPasswordValid) {
+            throw new UnauthorizedException('INVALID_CREDENTIALS');
+        }
+
+        // 4. Get accountability profile
         const accountabilityProfile = await this.accountabilityRepo.findByAuthProfileId(
             authProfile.id
         );
@@ -123,25 +145,25 @@ export class IdentityService {
             throw new InternalServerErrorException('IDENTITY_CONTEXT_CORRUPT');
         }
 
-        // 4. Get active personas
+        // 5. Get active personas
         const personas = await this.personaRepo.findActiveByAccountabilityProfileId(
             accountabilityProfile.id
         );
 
-        // 5. Select first active persona (or prompt user to create)
+        // 6. Select first active persona (or prompt user to create)
         const activePersona = personas[0];
         if (!activePersona) {
             throw new BadRequestException('NO_ACTIVE_PERSONA');
         }
 
-        // 6. Get trust level
+        // 7. Get trust level
         const trustLevel = await this.trustLevelRepo.findByPersonaId(activePersona.id);
 
         if (!trustLevel) {
             throw new InternalServerErrorException('IDENTITY_CONTEXT_CORRUPT');
         }
 
-        // 7. Return public + internal session data
+        // 8. Return public + internal session data
         return {
             personaId: activePersona.id,
             displayName: activePersona.displayName,

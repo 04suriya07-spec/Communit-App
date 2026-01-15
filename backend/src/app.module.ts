@@ -4,12 +4,16 @@ import { Module } from '@nestjs/common';
 import { SecurityModule } from './security/security.module';
 import { ObservabilityModule } from './observability/observability.module';
 
+// Database
+import { PrismaModule } from './prisma/prisma.module';
+
 // Core Modules
 import { IdentityModule } from './identity/identity.module';
 import { PostingModule } from './posting/posting.module';
 import { ModerationModule } from './moderation/moderation.module';
 import { PolicyModule } from './policy/policy.module';
 import { ReportingModule } from './reporting/reporting.module';
+import { CommunitiesModule } from './communities/communities.module';
 
 /**
  * App Module
@@ -22,12 +26,16 @@ import { ReportingModule } from './reporting/reporting.module';
         SecurityModule,
         ObservabilityModule,
 
+        // Database
+        PrismaModule,
+
         // Core Services
         PolicyModule,
         IdentityModule,
         PostingModule,
         ModerationModule,
         ReportingModule,
+        CommunitiesModule, // Phase 1: Community system
     ],
 })
 export class AppModule { }

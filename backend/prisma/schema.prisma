@@ -60,6 +60,7 @@ model AuthProfile {
   emailEncrypted          String                  @unique @map("email_encrypted")
   emailHash               String                  @unique @map("email_hash")
   authProvider            String                  @default("firebase") @map("auth_provider")
+  passwordHash            String?                 @map("password_hash") // For email/password auth
   createdAt               DateTime                @default(now()) @map("created_at") @db.Timestamptz
   accountabilityProfiles  AccountabilityProfile[]
 
@@ -392,6 +393,112 @@ model SystemConfig {
   updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz
 
   @@map("system_config")
+}
+
+// ============================================================
+// SCHEMA VERSION TRACKING
+// ============================================================
+
+// ============================================================
+// COMMUNITY SYSTEM (Phase 1)
+// ============================================================
+
+enum CommunityType {
+  private
+  public_restricted
+  public_open
+}
+
+enum MemberRole {
+  owner
+  admin
+  moderator
+  member
+  follower
+  guest
+}
+
+enum RequestStatus {
+  pending
+  approved
+  rejected
+}
+
+model Community {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug            String        @unique
+  name            String
+  description     String?
+  type            CommunityType
+  creatorId       String        @map("creator_id") @db.Uuid
+  avatarUrl       String?       @map("avatar_url")
+  bannerUrl       String?       @map("banner_url")
+  isSearchable    Boolean       @default(true) @map("is_searchable")
+  memberCount     Int           @default(0) @map("member_count")
+  followerCount   Int           @default(0) @map("follower_count")
+  metadata        Json          @default("{}")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime      @default(now()) @map("updated_at") @db.Timestamptz
+  deletedAt       DateTime?     @map("deleted_at") @db.Timestamptz
+  
+  members         CommunityMember[]
+  follows         Follow[]
+  joinRequests    JoinRequest[]
+  
+  @@index([type])
+  @@index([creatorId])
+  @@index([isSearchable])
+  @@map("communities")
+}
+
+model CommunityMember {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  communityId String     @map("community_id") @db.Uuid
+  userId      String     @map("user_id") @db.Uuid
+  role        MemberRole
+  joinedAt    DateTime   @default(now()) @map("joined_at") @db.Timestamptz
+  invitedBy   String?    @map("invited_by") @db.Uuid
+  metadata    Json       @default("{}")
+  
+  community   Community  @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  
+  @@unique([communityId, userId])
+  @@index([communityId])
+  @@index([userId])
+  @@index([communityId, role])
+  @@map("community_members")
+}
+
+model Follow {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  communityId         String    @map("community_id") @db.Uuid
+  followedAt          DateTime  @default(now()) @map("followed_at") @db.Timestamptz
+  notificationEnabled Boolean   @default(true) @map("notification_enabled")
+  
+  community           Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, communityId])
+  @@index([userId])
+  @@index([communityId])
+  @@map("follows")
+}
+
+model JoinRequest {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  communityId String        @map("community_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  status      RequestStatus
+  message     String?
+  reviewedBy  String?       @map("reviewed_by") @db.Uuid
+  reviewedAt  DateTime?     @map("reviewed_at") @db.Timestamptz
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  
+  community   Community     @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  
+  @@index([communityId, status])
+  @@index([userId])
+  @@map("join_requests")
 }
 
 // ============================================================

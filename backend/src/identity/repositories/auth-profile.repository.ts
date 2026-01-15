@@ -27,17 +27,20 @@ export class AuthProfileRepository implements IAuthProfileRepository {
     /**
      * Create auth profile
      * Stores both encrypted (recovery) and hash (lookup)
+     * Optionally stores password hash for email/password auth
      */
     async create(data: {
         emailEncrypted: string;
         emailHash: string;
         authProvider: string;
+        passwordHash?: string; // Optional: for email/password auth
     }): Promise<AuthProfile> {
         return this.prisma.authProfile.create({
             data: {
                 emailEncrypted: data.emailEncrypted,
                 emailHash: data.emailHash,
                 authProvider: data.authProvider,
+                passwordHash: data.passwordHash, // Store if provided
             },
         });
     }

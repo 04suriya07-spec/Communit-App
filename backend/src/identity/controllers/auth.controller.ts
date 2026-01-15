@@ -41,7 +41,20 @@ export class AuthController {
         session.trustLevel = result._internal.trustLevel;
         session.riskLevel = result._internal.riskLevel;
 
-        console.log('Session properties updated');
+        // CRITICAL: Explicitly save session to ensure persistence
+        await new Promise<void>((resolve, reject) => {
+            session.save((err: any) => {
+                if (err) {
+                    console.error('Session save error:', err);
+                    reject(err);
+                } else {
+                    console.log('Session saved successfully');
+                    resolve();
+                }
+            });
+        });
+
+        console.log('Session properties updated and saved');
 
         return {
             personaId: result.personaId,
@@ -62,18 +75,34 @@ export class AuthController {
         displayName: string;
         correlationId: string;
     }> {
+        console.log('Login request received:', dto.email);
         const result = await this.identityService.login({
             email: dto.email,
             password: dto.password,
         });
+        console.log('Login successful:', result.personaId);
 
         // Store internal session data (NOT returned to client)
-        (req as any).session = {
-            personaId: result.personaId,
-            accountabilityProfileId: result._internal.accountabilityProfileId,
-            trustLevel: result._internal.trustLevel,
-            riskLevel: result._internal.riskLevel,
-        };
+        const session = (req as any).session;
+        session.personaId = result.personaId;
+        session.accountabilityProfileId = result._internal.accountabilityProfileId;
+        session.trustLevel = result._internal.trustLevel;
+        session.riskLevel = result._internal.riskLevel;
+
+        // CRITICAL: Explicitly save session to ensure persistence
+        await new Promise<void>((resolve, reject) => {
+            session.save((err: any) => {
+                if (err) {
+                    console.error('Session save error:', err);
+                    reject(err);
+                } else {
+                    console.log('Session saved successfully');
+                    resolve();
+                }
+            });
+        });
+
+        console.log('Session properties updated and saved');
 
         // Return public data only
         return {
@@ -81,6 +110,23 @@ export class AuthController {
             displayName: result.displayName,
             correlationId: this.generateCorrelationId(),
         };
+    }
+
+    @Post('logout')
+    async logout(@Req() req: Request): Promise<{ message: string }> {
+        const session = (req as any).session;
+
+        return new Promise((resolve, reject) => {
+            session.destroy((err: any) => {
+                if (err) {
+                    console.error('Logout error:', err);
+                    reject(err);
+                } else {
+                    console.log('Session destroyed successfully');
+                    resolve({ message: 'Logged out successfully' });
+                }
+            });
+        });
     }
 
     private generateCorrelationId(): string {
