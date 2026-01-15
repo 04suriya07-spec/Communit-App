@@ -34,13 +34,18 @@ export const authApi = {
 
     /**
      * Logout user
-     * Note: Backend doesn't have explicit logout endpoint
-     * We clear session by calling a non-existent endpoint to trigger 401
-     * Then redirect to login
+     * Destroys session on backend and redirects to login
      */
     logout: async (): Promise<void> => {
-        // Clear local state and redirect
-        window.location.href = '/login';
+        try {
+            await apiClient.post('/auth/logout');
+        } catch (error) {
+            // Ignore errors, still redirect
+            console.error('Logout error:', error);
+        } finally {
+            // Always redirect to login
+            window.location.href = '/login';
+        }
     },
 };
 

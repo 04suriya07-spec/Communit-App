@@ -3,6 +3,8 @@ import { CommunitiesController } from './controllers/communities.controller';
 import { CommunitiesService } from './services/communities.service';
 import { CommunityRepository } from './repositories/community.repository';
 import { CommunityMemberRepository } from './repositories/community-member.repository';
+import { FollowRepository } from './repositories/follow.repository';
+import { JoinRequestRepository } from './repositories/join-request.repository';
 import { PrismaModule } from '../prisma/prisma.module';
 
 /**
@@ -26,11 +28,15 @@ import { PrismaModule } from '../prisma/prisma.module';
         CommunitiesService,
         CommunityRepository,
         CommunityMemberRepository,
+        FollowRepository,
+        JoinRequestRepository,
     ],
     exports: [
         CommunitiesService,
         CommunityRepository,
         CommunityMemberRepository,
+        FollowRepository,
+        JoinRequestRepository,
     ],
 })
 export class CommunitiesModule { }

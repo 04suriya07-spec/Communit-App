@@ -11,18 +11,11 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import AppShell from "@/components/layout/AppShell";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import PostsPage from "./pages/PostsPage";
+import { CommunitiesPage } from "./pages/CommunitiesPage";
 import NotFound from "./pages/NotFound";
-
-/**
- * Community App - Phase 1 MVP
- * 
- * Routes:
- * - /login - Public
- * - /register - Public
- * - /app/posts - Protected (main app)
- * - / - Redirects to /app/posts
- */
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,11 +34,10 @@ const App = () => (
           <Toaster />
           <Sonner />
           <Routes>
-            {/* Public routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
-
-            {/* Protected routes */}
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route
               path="/app"
               element={
@@ -57,11 +49,15 @@ const App = () => (
               <Route index element={<Navigate to="/app/posts" replace />} />
               <Route path="posts" element={<PostsPage />} />
             </Route>
-
-            {/* Redirects */}
+            <Route
+              path="/communities"
+              element={
+                <ProtectedRoute>
+                  <CommunitiesPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/" element={<Navigate to="/app/posts" replace />} />
-
-            {/* 404 */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </TooltipProvider>
@@ -71,4 +67,3 @@ const App = () => (
 );
 
 createRoot(document.getElementById("root")!).render(<App />);
-

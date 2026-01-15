@@ -7,19 +7,23 @@ import {
 } from '@nestjs/common';
 import { CommunityRepository } from '../repositories/community.repository';
 import { CommunityMemberRepository } from '../repositories/community-member.repository';
+import { FollowRepository } from '../repositories/follow.repository';
+import { JoinRequestRepository } from '../repositories/join-request.repository';
 import { CreateCommunityDto } from '../dto/create-community.dto';
 import { ListCommunitiesDto } from '../dto/list-communities.dto';
 import {
     CommunityResponseDto,
     ListCommunitiesResponseDto,
 } from '../dto/community-response.dto';
-import { Community, CommunityType, MemberRole } from '@prisma/client';
+import { Community, CommunityType, MemberRole, JoinRequest, CommunityMember, RequestStatus } from '@prisma/client';
 
 @Injectable()
 export class CommunitiesService {
     constructor(
         private readonly communityRepo: CommunityRepository,
         private readonly memberRepo: CommunityMemberRepository,
+        private readonly followRepo: FollowRepository,
+        private readonly joinRequestRepo: JoinRequestRepository,
     ) { }
 
     /**
@@ -212,22 +216,385 @@ export class CommunitiesService {
 
         if (userId) {
             userRole = (await this.memberRepo.getUserRole(community.id, userId)) || undefined;
-            // TODO Phase 2: Check if user is following
-            // isFollowing = await this.followRepo.isFollowing(userId, community.id);
+            isFollowing = await this.followRepo.isFollowing(userId, community.id);
         }
 
         return CommunityResponseDto.fromEntity(community, userRole, isFollowing);
     }
 
     // ============================================================
-    // TODO PHASE 2: Additional methods
+    // PHASE 2: Follow System
     // ============================================================
 
-    // TODO Phase 2: Update community (owner only)
-    // TODO Phase 2: Delete community (owner only)
-    // TODO Phase 2: Follow/unfollow community
-    // TODO Phase 2: Join community (with request for restricted/private)
-    // TODO Phase 2: Leave community
-    // TODO Phase 2: Manage members (add, remove, change role)
-    // TODO Phase 2: Approve/reject join requests
+    /**
+     * Follow a community
+     */
+    async follow(communityId: string, userId: string): Promise<void> {
+        const community = await this.communityRepo.findById(communityId);
+        if (!community) {
+            throw new NotFoundException('Community not found');
+        }
+
+        // Check if already following
+        const existing = await this.followRepo.findByUserAndCommunity(userId, communityId);
+        if (existing) {
+            return; // Idempotent - already following
+        }
+
+        // Create follow relationship
+        await this.followRepo.create(userId, communityId);
+
+        // Increment follower count
+        await this.communityRepo.incrementFollowerCount(communityId);
+    }
+
+    /**
+     * Unfollow a community
+     */
+    async unfollow(communityId: string, userId: string): Promise<void> {
+        const existing = await this.followRepo.findByUserAndCommunity(userId, communityId);
+        if (!existing) {
+            return; // Idempotent - not following
+        }
+
+        // Delete follow relationship
+        await this.followRepo.delete(userId, communityId);
+
+        // Decrement follower count
+        await this.communityRepo.decrementFollowerCount(communityId);
+    }
+
+    /**
+     * Get communities user is following
+     */
+    async getFollowing(userId: string): Promise<CommunityResponseDto[]> {
+        const follows = await this.followRepo.findByUser(userId);
+
+        return Promise.all(
+            follows.map(async (follow: any) => {
+                const userRole = await this.memberRepo.getUserRole(follow.communityId, userId);
+                return CommunityResponseDto.fromEntity(
+                    follow.community,
+                    userRole || undefined,
+                    true, // isFollowing = true
+                );
+            }),
+        );
+    }
+
+    // ============================================================
+    // PHASE 2: Join Request Workflow
+    // ============================================================
+
+    /**
+     * Join or request to join a community
+     */
+    async join(communityId: string, userId: string, message?: string): Promise<{
+        status: 'joined' | 'requested';
+        requestId?: string;
+    }> {
+        const community = await this.communityRepo.findById(communityId);
+        if (!community) {
+            throw new NotFoundException('Community not found');
+        }
+
+        // Check if already a member
+        const isMember = await this.memberRepo.isMember(communityId, userId);
+        if (isMember) {
+            return { status: 'joined' }; // Already a member
+        }
+
+        // Check for pending request
+        const pendingRequest = await this.joinRequestRepo.findPendingRequest(userId, communityId);
+        if (pendingRequest) {
+            return { status: 'requested', requestId: pendingRequest.id };
+        }
+
+        switch (community.type) {
+            case CommunityType.public_open:
+                // Auto-join
+                await this.memberRepo.create({
+                    communityId,
+                    userId,
+                    role: MemberRole.member,
+                });
+                await this.communityRepo.incrementMemberCount(communityId);
+                return { status: 'joined' };
+
+            case CommunityType.public_restricted:
+            case CommunityType.private:
+                // Create join request
+                const request = await this.joinRequestRepo.create({
+                    communityId,
+                    userId,
+                    message,
+                });
+                return { status: 'requested', requestId: request.id };
+
+            default:
+                throw new BadRequestException('Invalid community type');
+        }
+    }
+
+    /**
+     * Leave a community
+     */
+    async leave(communityId: string, userId: string): Promise<void> {
+        const community = await this.communityRepo.findById(communityId);
+        if (!community) {
+            throw new NotFoundException('Community not found');
+        }
+
+        const userRole = await this.memberRepo.getUserRole(communityId, userId);
+        if (!userRole) {
+            return; // Not a member
+        }
+
+        // Prevent owner from leaving
+        if (userRole === MemberRole.owner) {
+            throw new ForbiddenException('Owner cannot leave community. Transfer ownership first.');
+        }
+
+        // Remove member
+        await this.memberRepo.remove(communityId, userId);
+        await this.communityRepo.decrementMemberCount(communityId);
+    }
+
+    /**
+     * Get join requests for a community (admin/owner only)
+     */
+    async getJoinRequests(communityId: string, userId: string): Promise<JoinRequest[]> {
+        const userRole = await this.memberRepo.getUserRole(communityId, userId);
+        if (!userRole || (userRole !== MemberRole.owner && userRole !== MemberRole.admin)) {
+            throw new ForbiddenException('Only admins and owners can view join requests');
+        }
+
+        return this.joinRequestRepo.findByCommunity(communityId, RequestStatus.pending);
+    }
+
+    /**
+     * Approve a join request
+     */
+    async approveJoinRequest(
+        communityId: string,
+        requestId: string,
+        reviewerId: string,
+    ): Promise<void> {
+        const userRole = await this.memberRepo.getUserRole(communityId, reviewerId);
+        if (!userRole || (userRole !== MemberRole.owner && userRole !== MemberRole.admin)) {
+            throw new ForbiddenException('Only admins and owners can approve requests');
+        }
+
+        const request = await this.joinRequestRepo.findById(requestId);
+        if (!request || request.communityId !== communityId) {
+            throw new NotFoundException('Join request not found');
+        }
+
+        if (request.status !== RequestStatus.pending) {
+            throw new BadRequestException('Request already processed');
+        }
+
+        // Approve request
+        await this.joinRequestRepo.approve(requestId, reviewerId);
+
+        // Add user as member
+        await this.memberRepo.create({
+            communityId,
+            userId: request.userId,
+            role: MemberRole.member,
+        });
+
+        await this.communityRepo.incrementMemberCount(communityId);
+    }
+
+    /**
+     * Reject a join request
+     */
+    async rejectJoinRequest(
+        communityId: string,
+        requestId: string,
+        reviewerId: string,
+    ): Promise<void> {
+        const userRole = await this.memberRepo.getUserRole(communityId, reviewerId);
+        if (!userRole || (userRole !== MemberRole.owner && userRole !== MemberRole.admin)) {
+            throw new ForbiddenException('Only admins and owners can reject requests');
+        }
+
+        const request = await this.joinRequestRepo.findById(requestId);
+        if (!request || request.communityId !== communityId) {
+            throw new NotFoundException('Join request not found');
+        }
+
+        if (request.status !== RequestStatus.pending) {
+            throw new BadRequestException('Request already processed');
+        }
+
+        await this.joinRequestRepo.reject(requestId, reviewerId);
+    }
+
+    // ============================================================
+    // PHASE 2: Member Management
+    // ============================================================
+
+    /**
+     * Get all members of a community
+     */
+    async getMembers(communityId: string, userId?: string): Promise<CommunityMember[]> {
+        const community = await this.communityRepo.findById(communityId);
+        if (!community) {
+            throw new NotFoundException('Community not found');
+        }
+
+        // Check visibility
+        const canView = await this.canViewCommunity(community, userId);
+        if (!canView) {
+            throw new NotFoundException('Community not found');
+        }
+
+        return this.memberRepo.findByCommunity(communityId);
+    }
+
+    /**
+     * Change a member's role (owner/admin only)
+     */
+    async changeMemberRole(
+        communityId: string,
+        targetUserId: string,
+        newRole: MemberRole,
+        requesterId: string,
+    ): Promise<void> {
+        const requesterRole = await this.memberRepo.getUserRole(communityId, requesterId);
+        if (!requesterRole) {
+            throw new ForbiddenException('You are not a member of this community');
+        }
+
+        const targetRole = await this.memberRepo.getUserRole(communityId, targetUserId);
+        if (!targetRole) {
+            throw new NotFoundException('Target user is not a member');
+        }
+
+        // Role hierarchy check
+        const roleHierarchy = {
+            [MemberRole.owner]: 6,
+            [MemberRole.admin]: 5,
+            [MemberRole.moderator]: 4,
+            [MemberRole.member]: 3,
+            [MemberRole.follower]: 2,
+            [MemberRole.guest]: 1,
+        };
+
+        // Only owner and admin can change roles
+        if (requesterRole !== MemberRole.owner && requesterRole !== MemberRole.admin) {
+            throw new ForbiddenException('Only owners and admins can change roles');
+        }
+
+        // Cannot promote above own level
+        if (roleHierarchy[newRole] >= roleHierarchy[requesterRole]) {
+            throw new ForbiddenException('Cannot promote to or above your own role');
+        }
+
+        // Cannot demote owner
+        if (targetRole === MemberRole.owner) {
+            throw new ForbiddenException('Cannot change owner role. Use transfer ownership instead.');
+        }
+
+        // Admin cannot change another admin's role (only owner can)
+        if (requesterRole === MemberRole.admin && targetRole === MemberRole.admin) {
+            throw new ForbiddenException('Only owner can change admin roles');
+        }
+
+        await this.memberRepo.updateRole(communityId, targetUserId, newRole);
+    }
+
+    /**
+     * Remove a member from community (kick)
+     */
+    async removeMember(
+        communityId: string,
+        targetUserId: string,
+        requesterId: string,
+    ): Promise<void> {
+        const requesterRole = await this.memberRepo.getUserRole(communityId, requesterId);
+        if (!requesterRole) {
+            throw new ForbiddenException('You are not a member of this community');
+        }
+
+        const targetRole = await this.memberRepo.getUserRole(communityId, targetUserId);
+        if (!targetRole) {
+            return; // Already not a member
+        }
+
+        // Only owner and admin can remove members
+        if (requesterRole !== MemberRole.owner && requesterRole !== MemberRole.admin) {
+            throw new ForbiddenException('Only owners and admins can remove members');
+        }
+
+        // Cannot remove owner
+        if (targetRole === MemberRole.owner) {
+            throw new ForbiddenException('Cannot remove owner');
+        }
+
+        // Admin cannot remove another admin
+        if (requesterRole === MemberRole.admin && targetRole === MemberRole.admin) {
+            throw new ForbiddenException('Admins cannot remove other admins');
+        }
+
+        await this.memberRepo.remove(communityId, targetUserId);
+        await this.communityRepo.decrementMemberCount(communityId);
+    }
+
+    // ============================================================
+    // PHASE 2: Community Management
+    // ============================================================
+
+    /**
+     * Update community settings (owner only)
+     */
+    async update(
+        communityId: string,
+        userId: string,
+        updates: Partial<{
+            name: string;
+            description: string;
+            avatarUrl: string;
+            bannerUrl: string;
+            type: CommunityType;
+        }>,
+    ): Promise<CommunityResponseDto> {
+        const userRole = await this.memberRepo.getUserRole(communityId, userId);
+        if (userRole !== MemberRole.owner) {
+            throw new ForbiddenException('Only owner can update community settings');
+        }
+
+        const community = await this.communityRepo.findById(communityId);
+        if (!community) {
+            throw new NotFoundException('Community not found');
+        }
+
+        // If changing name, regenerate slug
+        if (updates.name && updates.name !== community.name) {
+            const newSlug = this.generateSlug(updates.name);
+            const existing = await this.communityRepo.findBySlug(newSlug);
+            if (existing && existing.id !== communityId) {
+                throw new ConflictException('Community with this name already exists');
+            }
+            updates['slug'] = newSlug;
+        }
+
+        const updated = await this.communityRepo.update(communityId, updates);
+        return this.enrichWithUserContext(updated, userId);
+    }
+
+    /**
+     * Delete community (soft delete, owner only)
+     */
+    async delete(communityId: string, userId: string): Promise<void> {
+        const userRole = await this.memberRepo.getUserRole(communityId, userId);
+        if (userRole !== MemberRole.owner) {
+            throw new ForbiddenException('Only owner can delete community');
+        }
+
+        await this.communityRepo.delete(communityId);
+    }
 }
+

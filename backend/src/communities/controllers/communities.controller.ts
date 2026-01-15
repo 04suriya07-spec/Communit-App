@@ -9,6 +9,7 @@ import {
     UseGuards,
     HttpCode,
     HttpStatus,
+    UnauthorizedException,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { CommunitiesService } from '../services/communities.service';
@@ -18,6 +19,7 @@ import {
     CommunityResponseDto,
     ListCommunitiesResponseDto,
 } from '../dto/community-response.dto';
+import { ParseUUIDPipe } from '../../common/pipes/parse-uuid.pipe';
 
 /**
  * Communities Controller
@@ -47,7 +49,10 @@ export class CommunitiesController {
         const userId = (req as any).session?.accountabilityProfileId;
 
         if (!userId) {
-            throw new Error('Authentication required'); // Will be handled by auth guard in Phase 2
+            throw new UnauthorizedException({
+                error: 'UNAUTHORIZED',
+                message: 'Authentication required',
+            });
         }
 
         return this.communitiesService.create(dto, userId);
@@ -76,7 +81,7 @@ export class CommunitiesController {
      */
     @Get(':id')
     async getById(
-        @Param('id') id: string,
+        @Param('id', ParseUUIDPipe) id: string,
         @Req() req: Request,
     ): Promise<CommunityResponseDto> {
         const userId = (req as any).session?.accountabilityProfileId;
@@ -85,18 +90,218 @@ export class CommunitiesController {
     }
 
     // ============================================================
-    // TODO PHASE 2: Additional endpoints
+    // PHASE 2: Follow System Endpoints
     // ============================================================
 
-    // TODO Phase 2: PUT /communities/:id - Update community (owner only)
-    // TODO Phase 2: DELETE /communities/:id - Delete community (owner only)
-    // TODO Phase 2: POST /communities/:id/follow - Follow community
-    // TODO Phase 2: DELETE /communities/:id/follow - Unfollow community
-    // TODO Phase 2: POST /communities/:id/join - Join/request to join community
-    // TODO Phase 2: POST /communities/:id/leave - Leave community
-    // TODO Phase 2: GET /communities/:id/members - Get community members
-    // TODO Phase 2: POST /communities/:id/members/:userId/role - Change member role
-    // TODO Phase 2: GET /communities/:id/requests - Get join requests (admin/owner)
-    // TODO Phase 2: POST /communities/:id/requests/:requestId/approve - Approve join request
-    // TODO Phase 2: POST /communities/:id/requests/:requestId/reject - Reject join request
+    /**
+     * Follow a community
+     */
+    @Post(':id/follow')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    async follow(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request): Promise<void> {
+        const userId = (req as any).session?.accountabilityProfileId;
+        if (!userId) {
+            throw new UnauthorizedException({ error: 'UNAUTHORIZED', message: 'Authentication required' });
+        }
+
+        await this.communitiesService.follow(id, userId);
+    }
+
+    /**
+     * Unfollow a community
+     */
+    @Post(':id/unfollow')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    async unfollow(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request): Promise<void> {
+        const userId = (req as any).session?.accountabilityProfileId;
+        if (!userId) {
+            throw new UnauthorizedException({ error: 'UNAUTHORIZED', message: 'Authentication required' });
+        }
+
+        await this.communitiesService.unfollow(id, userId);
+    }
+
+    /**
+     * Get communities user is following
+     */
+    @Get('following/me')
+    async getFollowing(@Req() req: Request): Promise<CommunityResponseDto[]> {
+        const userId = (req as any).session?.accountabilityProfileId;
+        if (!userId) {
+            throw new UnauthorizedException({ error: 'UNAUTHORIZED', message: 'Authentication required' });
+        }
+
+        return this.communitiesService.getFollowing(userId);
+    }
+
+    // ============================================================
+    // PHASE 2: Join Request Workflow Endpoints
+    // ============================================================
+
+    /**
+     * Join or request to join a community
+     */
+    @Post(':id/join')
+    async join(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Body() body: { message?: string },
+        @Req() req: Request,
+    ): Promise<{ status: 'joined' | 'requested'; requestId?: string }> {
+        const userId = (req as any).session?.accountabilityProfileId;
+        if (!userId) {
+            throw new UnauthorizedException({ error: 'UNAUTHORIZED', message: 'Authentication required' });
+        }
+
+        return this.communitiesService.join(id, userId, body.message);
+    }
+
+    /**
+     * Leave a community
+     */
+    @Post(':id/leave')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    async leave(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request): Promise<void> {
+        const userId = (req as any).session?.accountabilityProfileId;
+        if (!userId) {
+            throw new UnauthorizedException({ error: 'UNAUTHORIZED', message: 'Authentication required' });
+        }
+
+        await this.communitiesService.leave(id, userId);
+    }
+
+    /**
+     * Get join requests for a community (admin/owner only)
+     */
+    @Get(':id/requests')
+    async getJoinRequests(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+        const userId = (req as any).session?.accountabilityProfileId;
+        if (!userId) {
+            throw new UnauthorizedException({ error: 'UNAUTHORIZED', message: 'Authentication required' });
+        }
+
+        return this.communitiesService.getJoinRequests(id, userId);
+    }
+
+    /**
+     * Approve a join request
+     */
+    @Post(':id/requests/:requestId/approve')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    async approveJoinRequest(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Param('requestId', ParseUUIDPipe) requestId: string,
+        @Req() req: Request,
+    ): Promise<void> {
+        const userId = (req as any).session?.accountabilityProfileId;
+        if (!userId) {
+            throw new UnauthorizedException({ error: 'UNAUTHORIZED', message: 'Authentication required' });
+        }
+
+        await this.communitiesService.approveJoinRequest(id, requestId, userId);
+    }
+
+    /**
+     * Reject a join request
+     */
+    @Post(':id/requests/:requestId/reject')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    async rejectJoinRequest(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Param('requestId', ParseUUIDPipe) requestId: string,
+        @Req() req: Request,
+    ): Promise<void> {
+        const userId = (req as any).session?.accountabilityProfileId;
+        if (!userId) {
+            throw new UnauthorizedException({ error: 'UNAUTHORIZED', message: 'Authentication required' });
+        }
+
+        await this.communitiesService.rejectJoinRequest(id, requestId, userId);
+    }
+
+    // ============================================================
+    // PHASE 2: Member Management Endpoints
+    // ============================================================
+
+    /**
+     * Get all members of a community
+     */
+    @Get(':id/members')
+    async getMembers(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+        const userId = (req as any).session?.accountabilityProfileId;
+        return this.communitiesService.getMembers(id, userId);
+    }
+
+    /**
+     * Change a member's role (owner/admin only)
+     */
+    @Post(':id/members/:userId/role')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    async changeMemberRole(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Param('userId', ParseUUIDPipe) targetUserId: string,
+        @Body() body: { role: string },
+        @Req() req: Request,
+    ): Promise<void> {
+        const userId = (req as any).session?.accountabilityProfileId;
+        if (!userId) {
+            throw new UnauthorizedException({ error: 'UNAUTHORIZED', message: 'Authentication required' });
+        }
+
+        await this.communitiesService.changeMemberRole(id, targetUserId, body.role as any, userId);
+    }
+
+    /**
+     * Remove a member from community (kick)
+     */
+    @Post(':id/members/:userId/remove')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    async removeMember(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Param('userId', ParseUUIDPipe) targetUserId: string,
+        @Req() req: Request,
+    ): Promise<void> {
+        const userId = (req as any).session?.accountabilityProfileId;
+        if (!userId) {
+            throw new UnauthorizedException({ error: 'UNAUTHORIZED', message: 'Authentication required' });
+        }
+
+        await this.communitiesService.removeMember(id, targetUserId, userId);
+    }
+
+    // ============================================================
+    // PHASE 2: Community Management Endpoints
+    // ============================================================
+
+    /**
+     * Update community settings (owner only)
+     */
+    @Post(':id/update')
+    async update(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Body() updates: any,
+        @Req() req: Request,
+    ): Promise<CommunityResponseDto> {
+        const userId = (req as any).session?.accountabilityProfileId;
+        if (!userId) {
+            throw new UnauthorizedException({ error: 'UNAUTHORIZED', message: 'Authentication required' });
+        }
+
+        return this.communitiesService.update(id, userId, updates);
+    }
+
+    /**
+     * Delete community (soft delete, owner only)
+     */
+    @Post(':id/delete')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    async delete(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request): Promise<void> {
+        const userId = (req as any).session?.accountabilityProfileId;
+        if (!userId) {
+            throw new UnauthorizedException({ error: 'UNAUTHORIZED', message: 'Authentication required' });
+        }
+
+        await this.communitiesService.delete(id, userId);
+    }
 }
+
+
